@@ -66,11 +66,10 @@ contract RizalLibary {
         function payBalance() external payable private isStudent {
             Student storage student = students[msg.sender];
             require(student.holdorder == HoldOrder.Yes, "No existing hold order");
-            require(msg.value >=  0.00000000005) ether, "Payment must be at least 0.00000000005 ether");
+            require(msg.value >=  0.00000000005) ether, "Payment must be at least 0.00000000005 ether";
             student.balance = 0;
             student.holdorder = HoldOrder.No;
 
-            
     }
 
 }
