@@ -43,32 +43,39 @@ contract RizalLibary {
         librarian = msg.sender;
     }
     
-        function addStudent() {
-        // TO-DO
+    function addStudent(address _student, uint _id) external isLibrarian {
+        students[_student] = Student({
+            idnumber: _id,
+            balance: 0,
+            holdorder: HoldOrder.No
+        });
+
+        emit StudentEnrolled(_student, _id);
     }
 
-        function borrow(uint _callnumber) public isStudent{
-            require(students[msg.sender].idnumber != 0, "Student not Enrolled");
-            require(students[msg.sender].holdorder == HoldOrder.No, "You Have a HoldOrder");
-            require(borrowedBook[msg.sender] == 0, "Already Borrowed A Book!");
-            require(books[_callnumber].status == Status.Available, "Book is not Available");
-            books[_callnumber].status == Status.Borrowed;
-            borrowedBook[msg.sender] = _callnumber;
-            bookTimeStamp[msg.sender] = block.timestamp;
+    function borrow(uint _callnumber) public isStudent{
+        require(students[msg.sender].idnumber != 0, "Student not Enrolled");
+        require(students[msg.sender].holdorder == HoldOrder.No, "You Have a HoldOrder");
+        require(borrowedBook[msg.sender] == 0, "Already Borrowed A Book!");
+        require(books[_callnumber].status == Status.Available, "Book is not Available");
+        books[_callnumber].status == Status.Borrowed;
+        borrowedBook[msg.sender] = _callnumber;
+        bookTimeStamp[msg.sender] = block.timestamp;
     }
 
-        function return() {
+    function return() {
         // TO-DO for the hold order you can use th block.timestamp in my function borrow to check the time just search how it works if not familiar. Then update the book that was borrowed to Available just copy
         // line 54 of my code then update line 55 and 56 si that the student will have no more borrowed books
         // and the timestamp of the borrowed book is removed since the book has been returned
     
     }
-        function payBalance() external payable private isStudent {
-            Student storage student = students[msg.sender];
-            require(student.holdorder == HoldOrder.Yes, "No existing hold order");
-            require(msg.value >=  0.00000000005) ether, "Payment must be at least 0.00000000005 ether";
-            student.balance = 0;
-            student.holdorder = HoldOrder.No;
+
+    function payBalance() external payable private isStudent {
+        Student storage student = students[msg.sender];
+        require(student.holdorder == HoldOrder.Yes, "No existing hold order");
+        require(msg.value >=  0.00000000005) ether, "Payment must be at least 0.00000000005 ether";
+        student.balance = 0;
+        student.holdorder = HoldOrder.No;
 
     }
 
