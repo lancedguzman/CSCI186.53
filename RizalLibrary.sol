@@ -26,7 +26,6 @@ contract RizalLibary {
     mapping(address => uint) public borrowedBook;
     mapping(address => uint) public bookTimeStamp;
 
-
     modifier isLibrarian() {
         require(msg.sender == librarian, "You are not the Librarian!");
         _;
@@ -58,25 +57,37 @@ contract RizalLibary {
         require(students[msg.sender].holdorder == HoldOrder.No, "You Have a HoldOrder");
         require(borrowedBook[msg.sender] == 0, "Already Borrowed A Book!");
         require(books[_callnumber].status == Status.Available, "Book is not Available");
-        books[_callnumber].status == Status.Borrowed;
+        books[_callnumber].status = Status.Borrowed;
         borrowedBook[msg.sender] = _callnumber;
         bookTimeStamp[msg.sender] = block.timestamp;
     }
 
-    function return() {
-        // TO-DO for the hold order you can use th block.timestamp in my function borrow to check the time just search how it works if not familiar. Then update the book that was borrowed to Available just copy
-        // line 54 of my code then update line 55 and 56 si that the student will have no more borrowed books
-        // and the timestamp of the borrowed book is removed since the book has been returned
-    
+    function Return() external isStudent {
+        require(students[msg.sender].idnumber != 0, "Student not enrolled.");
+        require(borrowedBook[msg.sender] != 0, "No book to return.");
+
+        uint borrowedCallNumber = borrowedBook[msg.sender];
+        uint borrowedTime = bookTimeStamp[msg.sender];
+
+        uint returnDeadline = 14 days;
+
+        if (block.timestamp > borrowedTime + returnDeadline) {
+            students[msg.sender].balance += 50000 wei;
+            students[msg.sender].holdorder = HoldOrder.Yes;
+        }
+
+        books[borrowedCallNumber].status = Status.Available;
+
+        borrowedBook[msg.sender] = 0;
+        bookTimeStamp[msg.sender] = 0;
     }
 
-    function payBalance() external payable private isStudent {
+    function payBalance() external payable isStudent {
         Student storage student = students[msg.sender];
-        require(student.holdorder == HoldOrder.Yes, "No existing hold order");
-        require(msg.value >=  0.00000000005) ether, "Payment must be at least 0.00000000005 ether";
+        require(student.holdorder == HoldOrder.Yes, "No existing hold order.");
+        require(msg.value >=  500000 wei, "Payment must be at least 500000 wei.");
+
         student.balance = 0;
         student.holdorder = HoldOrder.No;
-
     }
-
 }
