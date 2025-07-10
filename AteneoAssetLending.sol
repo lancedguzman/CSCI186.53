@@ -11,15 +11,8 @@ struct Asset {
 }
 
 contract AteneoLendingContract {
-    struct Borrower {
-        address borrower;
-        uint deposit_fee;
-        uint penalty_fee;
-        bool flagged;
-    }
-
-    // TO ADD: Set the penalty fee for returning an asset late
-    // TO ADD: Set the security deposit for all borrowers 
+    uint public penalty_fee = 2000000 wei;
+    uint public security_deposit = 1000000 wei;
 
     mapping(address => bool) public flags; // Mapping of flagged users
     mapping(address => bool) private borrowers; // Mapping of borrowers and borrowing status
@@ -27,23 +20,19 @@ contract AteneoLendingContract {
 
     /// @notice Modifier that checks if user is flagged
     modifier flagged() {
-        /* TO ADD: Modifier to check if user is flagged,
-        else revert with an error message saying that user is not flagged
-        */
-        
+        require(flags[msg.sender], "You are not flagged!"); 
         _;
     }
 
     /// @notice Modifier that checks if user is not flagged
     modifier notFlagged() {
-        /* TO ADD: Modifier to check if user is not flagged,
-        else revert with an error message for paying penalty. */
+        require(flags[msg.sender], "You must pay the penalty fee!");
         _;
     }
 
     /// @notice Modifier that checks if user is not flagged
     modifier notBorrowing() {
-        // TO ADD: Modifier to check if user is not currently borrowing an asset
+        require(!borrowers[msg.sender], "You are borrowing an asset!");
         _;
     }
 
@@ -51,19 +40,29 @@ contract AteneoLendingContract {
     /// @param _name The name of the asset
     /// @param _rental_fee The rental fee for borrowing the asset
     function listItem(string memory _name, uint _rental_fee) external {
-        // TO ADD: Add asset to the list of available assets
+        listedAssets.push(Asset({
+            owner: msg.sender,
+            name: _name,
+            rental_fee: _rental_fee,
+            borrowed: false,
+            currentContract: address(0)
+        }));
     }
 
     /// @notice Borrow an asset by ID, paying rental and deposit fees
     /// @param _itemId The index of the asset in the list
     function borrow(uint _itemId) external payable notBorrowing notFlagged {
-        // TO ADD: Check if _itemId is valid
-        // TO ADD: Check if asset is already borrowed
-        // TO ADD: Check if the payment is correct
+        require(_itemId < listedAssets.length, "Invalid Asset ID");
 
-        /* TO ADD: Handle borrowing action, 
-        transfer deposit and rental fees, 
-        and update borrower and item status */
+        Asset storage item = listedAssets[_itemId];
+
+        require(!item.borrowed, "Asset is already borrowed.");
+
+        uint total_cost = item.rental_fee + security_deposit;
+        require(msg.value > total_cost, "Insufficient Payment");
+
+        item.borrowed = true;
+        item.currentContract = msg.sender;
     }
 
     /// @notice Mark an asset as returned (can only be called by the AssetContract)
