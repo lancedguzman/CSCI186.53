@@ -23,11 +23,12 @@ contract PatentSystem {
     address internal admin;
 
     uint public registration_fee = 1000000 wei;
-    uint public maintanence_fee = 50000 wei;
+    uint public maintenance_fee = 50000 wei;
     uint public transfer_fee = 50000 wei;
     uint public adminBalance;
 
-    mapping(address => uint[]) public register;
+    mapping(address => uint[]) public registeredPatent;
+    mapping(address => uint[]) public registeredCopyright;
     mapping(address => bool) public approvedPatent;
     mapping(address => bool) public approvedCopyright;
     Patent[] public listedPatents;
@@ -38,25 +39,13 @@ contract PatentSystem {
 
     // @notice Modifier that checks if you are the admin.
     modifier isAdmin() {
-        require(msg.sender == admin, "You are the admin.");
+        require(msg.sender == admin, "Only admin can access this.");
         _;
     }
 
     // @notice Modifier that checks if you are not the admin.
     modifier isNotAdmin() {
-        require(msg.sender != admin, "Only admin can access this.");
-        _;
-    }
-
-    // @notice Modifier that checks if your patent is registered.
-    modifier isRegistered() {
-        require(register[msg.sender].length > 0, "Your intellectual property is NOT registered.");
-        _;
-    }
-
-    // @notice Modifier that checks if your patent is registered.
-    modifier isNotRegistered() {
-        require(register[msg.sender].length == 0, "Your intellectual property is already registered.");
+        require(msg.sender != admin, "You are the admin.");
         _;
     }
 
@@ -64,12 +53,26 @@ contract PatentSystem {
         admin = msg.sender;
     }
 
+    // @notice Modifer to check if patent is expired.
+    modifier notExpiredPatent(uint patentID) {
+        require(patentID < listedPatents.length, "Invalid patent ID");
+        require(block.timestamp <= listedPatents[patentID].dateExpiry, "Patent is expired.");
+        _;
+    }
+
+    // @notice Modifier to check if copyright is expired.
+    modifier notExpiredCopyright(uint copyrightID) {
+        require(copyrightID < listedCopyrights.length, "Invalid copyright ID");
+        require(block.timestamp <= listedCopyrights[copyrightID].dateExpiry, "Copyright is expired.");
+        _;
+    }
+
     // @notice Function to register a patent.
     function registerPatent(string memory _name) public {
         require(bytes(_name).length > 0, "Patent name is required.");
         uint256 newPatentID = listedPatents.length;
         uint256 currentTime = block.timestamp;
-        
+
         Patent memory newPatent = Patent({
             patentID: newPatentID,
             owner: msg.sender,
@@ -80,51 +83,70 @@ contract PatentSystem {
         });
 
         listedPatents.push(newPatent);
-        register[msg.sender].push(newPatentID);
+        registeredPatent[msg.sender].push(newPatentID);
         approvedPatent[msg.sender] = true;
 
         emit PatentRegistered(msg.sender, newPatentID, _name, currentTime);
     }
 
-    // @notice Function to pay registration for patent.
-    function payPatentRegistration(uint patentID) external payable isRegistered {
-        require(patentID < listedPatents.length, "Invalid patent ID");
-        require(listedPatents[patentID].owner == msg.sender, "This is NOT your patent.");
-        require(msg.value == registration_fee, "Incorrect registration amount");
-        require(admin != address(0), "Admin isn't set.");
-
+    // @notice Function to pay registration fee.
+    function payPatentRegistration(uint patentID) external payable notExpiredPatent(patentID) {
+        require(msg.sender == listedPatents[patentID].owner, "Not your patent.");
+        require(msg.value == maintenance_fee, "Incorrect maintenance amount");
         adminBalance += msg.value;
     }
 
-    // @notice Function to renew a patent after a given amount of time.
-    function payMaintanence() external payable isRegistered {
-        require(msg.value == maintanence_fee, "Incorrect maintanence amount");
+    // @notice Function to pay maintenance fee.
+    function paymaintenance(uint patentID) external payable notExpiredPatent(patentID) {
+        require(msg.sender == listedPatents[patentID].owner, "Not your patent.");
+        require(msg.value == maintenance_fee, "Incorrect maintenance amount");
         require(admin != address(0), "Admin isn't set.");
-
         adminBalance += msg.value;
     }
 
-    // @notice Function to transfer a patent to another owner.
-    function transferPatent(uint _patentID, address newOwner) external payable{
-        require(_patentID < listedPatents.length, "Invalid patent ID");
+    // @notice Function to transfer patent and pay transfer fee.
+    function transferPatent(uint _patentID, address newOwner) external payable notExpiredPatent (_patentID) {
         Patent storage patent = listedPatents[_patentID];
         require(patent.owner == msg.sender, "You do not own this patent");
         require(newOwner != address(0), "New owner cannot be zero address");
         require(msg.value == transfer_fee, "Incorrect transfer fee");
-        require(admin != address(0), "Admin address not set");
 
-        uint[] storage currentOwnerPatents = register[msg.sender];
-        for (uint i = 0; i < currentOwnerPatents.length; i++) {
-            if (currentOwnerPatents[i] == _patentID) {
-                currentOwnerPatents[i] = currentOwnerPatents[currentOwnerPatents.length - 1];
-                currentOwnerPatents.pop();
+        uint[] storage senderPatents = registeredPatent[msg.sender];
+        for (uint i = 0; i < senderPatents.length; i++) {
+            if (senderPatents[i] == _patentID) {
+                senderPatents[i] = senderPatents[senderPatents.length - 1];
+                senderPatents.pop();
                 break;
             }
         }
-
         patent.owner = newOwner;
-        register[newOwner].push(_patentID);
+        registeredPatent[newOwner].push(_patentID);
         adminBalance += msg.value;
+    }
+
+    // @notice Function to deactivate expired patents.
+    function deactiveExpiredPatent() external isAdmin {
+        for (uint i = 0; i < listedPatents.length; i++) {
+            if (listedPatents[i].registered && block.timestamp > listedPatents[i].dateExpiry) {
+                listedPatents[i].registered = false;
+            }
+        }
+    }
+
+    // @notice returns if patent is expired.
+    function isPatentExpired(uint patentID) public view returns (bool) {
+        require(patentID < listedPatents.length, "Invalid ID");
+        return block.timestamp > listedPatents[patentID].dateExpiry;
+    }
+
+    // @notice views the patent of the user.
+    function viewMyPatents() external view returns (uint[] memory) {
+        return registeredPatent[msg.sender];
+    }
+
+    // @notice views all the patents.
+    function viewAllPatents() external view returns (Patent[] memory) {
+        return listedPatents;
     }
 
     // @notice Function to register copyright.
@@ -132,7 +154,7 @@ contract PatentSystem {
         require(bytes(_name).length > 0, "Copyright name is required.");
         uint256 newCopyrightID = listedCopyrights.length;
         uint256 currentTime = block.timestamp;
-        
+
         Copyright memory newCopyright = Copyright({
             copyrightID: newCopyrightID,
             owner: msg.sender,
@@ -143,43 +165,72 @@ contract PatentSystem {
         });
 
         listedCopyrights.push(newCopyright);
-        register[msg.sender].push(newCopyrightID);
+        registeredCopyright[msg.sender].push(newCopyrightID);
         approvedCopyright[msg.sender] = true;
 
         emit CopyrightRegistered(msg.sender, newCopyrightID, _name, currentTime);
     }
 
-    function payCopyrightRegistration(uint copyrightID) external payable {
-        // TO-DO: checks if copyright is registered, then pays balance.
+    // @notice Function to pay registration fee.
+    function payCopyrightRegistration(uint copyrightID) external payable notExpiredCopyright (copyrightID) {
+        require(listedCopyrights[copyrightID].owner == msg.sender, "This is NOT your copyright");
+        require(msg.value == registration_fee, "Incorrect registration amount");
+        adminBalance += msg.value;
     }
 
-    function transferCopyright(uint _copyrightID, address newOwner) external payable {
-        // TO-DO: transfers to the next owner, then pays the transfer fee to admin.
+    // @notice Function to tranfer copyright and pay transfer fee.
+    function transferCopyright(uint _copyrightID, address newOwner) external payable notExpiredCopyright (_copyrightID) {
+        Copyright storage copyright = listedCopyrights[_copyrightID];
+        require(copyright.owner == msg.sender, "You do not own this copyright");
+        require(newOwner != address(0), "New owner cannot be zero address");
+        require(msg.value == transfer_fee, "Incorrect transfer fee");
+
+        uint[] storage senderCopyrights = registeredCopyright[msg.sender];
+        for (uint i = 0; i < senderCopyrights.length; i++) {
+            if (senderCopyrights[i] == _copyrightID) {
+                senderCopyrights[i] = senderCopyrights[senderCopyrights.length - 1];
+                senderCopyrights.pop();
+                break;
+            }
+        }
+        copyright.owner = newOwner;
+        registeredCopyright[newOwner].push(_copyrightID);
+        adminBalance += msg.value;
+    }
+
+    // @notice Function to deactivate expired copyrights.
+    function deactivateExpiredCopyrights() external isAdmin {
+        for (uint i = 0; i < listedCopyrights.length; i++) {
+            if (listedCopyrights[i].registered && block.timestamp > listedCopyrights[i].dateExpiry) {
+                listedCopyrights[i].registered = false;
+            }
+        }
+    }
+
+    // @notice checks if copyright is expired.
+    function isCopyrightExpired(uint copyrightID) public view returns (bool) {
+        require(copyrightID < listedCopyrights.length, "Invalid ID");
+        return block.timestamp > listedCopyrights[copyrightID].dateExpiry;
+    }
+
+    // @notice views the copyrights of the user.
+    function viewMyCopyrights() external view returns (uint[] memory) {
+        return registeredCopyright[msg.sender];
+    }
+
+    // notice views all the copyrights.
+    function viewAllCopyrights() external view returns (Copyright[] memory) {
+        return listedCopyrights;
     }
 
     // @notice Function to get admin balance.
     function getAdminBalance() public view returns (uint) {
         return adminBalance;
     }
+
+    // @notice Function to withdraw admin balance.
+    function withdraw() external isAdmin {
+        payable(admin).transfer(adminBalance);
+        adminBalance = 0;
+    }
 }
-
-// contract PatentContract {
-//     address private parent;
-//     address public owner;
-//     uint public patentID;
-//     uint256 public dateFiled;
-//     uint256 public dateExpiry; 
-//     bool public registered;
-
-//     receive() external payable{}
-
-//     constructor(address _parent, address _owner, uint _patentID) {
-//         parent = _parent;
-//         owner = _owner;
-//         patentID = _patentID;
-//     }
-// }
-
-// contract CopyrightContract {
-//     uint private duration = 30 seconds; // For testing
-// }
